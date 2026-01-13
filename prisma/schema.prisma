@@ -1,0 +1,40 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Asset {
+  id           String        @id @default(cuid())
+  ticker       String        @unique // e.g., BTC, AAPL
+  name         String
+  type         String        // CRYPTO, STOCK, ETF
+  transactions Transaction[]
+}
+
+model Transaction {
+  id           String   @id @default(cuid())
+  date         DateTime
+  type         String   // BUY, SELL, WITHDRAW
+  quantity     Float
+  unitPrice    Float    // In original currency
+  currency     String   // USD or EUR
+  exchangeRate Float    @default(1.0) // EUR/USD rate at transaction date
+  fees         Float    @default(0.0)
+  totalEur     Float    // Calculated cost in EUR
+  assetId      String
+  asset        Asset    @relation(fields: [assetId], references: [id])
+}
+
+// Stores daily snapshots for the "History" chart
+model PortfolioSnapshot {
+  id                   String   @id @default(cuid())
+  date                 DateTime @unique
+  totalValueEur        Float
+  totalInvestedEur     Float
+  msciPrice            Float    // Benchmark price that day
+  theoreticalMsciUnits Float    // Cumulative units of MSCI if we had invested purely in MSCI
+}
