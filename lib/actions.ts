@@ -128,7 +128,7 @@ export async function getPortfolioData(): Promise<PortfolioData> {
 
   // Récupérer les prix en temps réel
   const { prices: livePrices, eurUsdRate } = await fetchLivePrices(
-    assets.map((a) => ({ ticker: a.ticker, type: a.type }))
+    assets.map((a: { ticker: string; type: string }) => ({ ticker: a.ticker, type: a.type }))
   );
 
   const holdings: HoldingData[] = [];
@@ -281,7 +281,7 @@ export async function addTransaction(formData: FormData) {
   }
 
   // Create transaction
-  await prisma.transaction.create({
+  const transaction = await prisma.transaction.create({
     data: {
       date,
       type,
@@ -295,9 +295,10 @@ export async function addTransaction(formData: FormData) {
     },
   });
 
-  // Update MSCI benchmark tracking
+  // Save benchmark prices at transaction time (for accurate comparison later)
   if (type === "BUY") {
-    await updateMsciBenchmark(date, totalEur);
+    const { saveTransactionBenchmark } = await import("./snapshot-service");
+    await saveTransactionBenchmark(transaction.id);
   }
 
   revalidatePath("/");
@@ -420,17 +421,14 @@ async function updateMsciBenchmark(date: Date, investedEur: number) {
   });
 }
 
-// Get portfolio history for charts
+// Get portfolio history for charts (with all benchmark values pre-calculated)
 export async function getPortfolioHistory() {
-  const snapshots = await prisma.portfolioSnapshot.findMany({
-    orderBy: { date: "asc" },
-  });
+  const { getPortfolioHistoryWithBenchmarks } = await import("./snapshot-service");
+  return await getPortfolioHistoryWithBenchmarks();
+}
 
-  return snapshots.map((snapshot) => ({
-    date: snapshot.date.toISOString().split("T")[0],
-    portfolioValue: snapshot.totalValueEur,
-    invested: snapshot.totalInvestedEur,
-    msciValue: snapshot.theoreticalMsciUnits * FALLBACK_PRICES.MSCIWLD,
-    msciUnits: snapshot.theoreticalMsciUnits,
-  }));
+// Get current benchmark comparison values
+export async function getBenchmarkComparison() {
+  const { getCurrentBenchmarkValues } = await import("./snapshot-service");
+  return await getCurrentBenchmarkValues();
 }

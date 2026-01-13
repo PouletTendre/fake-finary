@@ -29,12 +29,40 @@ model Transaction {
   asset        Asset    @relation(fields: [assetId], references: [id])
 }
 
-// Stores daily snapshots for the "History" chart
+// Stores snapshots for the portfolio history (every 15 minutes)
 model PortfolioSnapshot {
-  id                   String   @id @default(cuid())
-  date                 DateTime @unique
-  totalValueEur        Float
-  totalInvestedEur     Float
-  msciPrice            Float    // Benchmark price that day
-  theoreticalMsciUnits Float    // Cumulative units of MSCI if we had invested purely in MSCI
+  id               String   @id @default(cuid())
+  date             DateTime @unique
+  totalValueEur    Float    // Current portfolio value
+  totalInvestedEur Float    // Total amount invested (cumulative)
+  
+  // Index prices at snapshot time (in EUR)
+  priceMsciWorld   Float    @default(0)
+  priceSP500       Float    @default(0)
+  priceNasdaq      Float    @default(0)
+  priceCac40       Float    @default(0)
+  priceBtc         Float    @default(0)
+  priceEth         Float    @default(0)
+  
+  // Theoretical units accumulated (as if we had invested in these indices)
+  unitsMsciWorld   Float    @default(0)
+  unitsSP500       Float    @default(0)
+  unitsNasdaq      Float    @default(0)
+  unitsCac40       Float    @default(0)
+  unitsBtc         Float    @default(0)
+  unitsEth         Float    @default(0)
+}
+
+// Stores index prices at transaction time for accurate benchmark calculation
+model TransactionBenchmark {
+  id            String   @id @default(cuid())
+  transactionId String
+  
+  // Index prices at the transaction date (in EUR)
+  priceMsciWorld Float   @default(0)
+  priceSP500     Float   @default(0)
+  priceNasdaq    Float   @default(0)
+  priceCac40     Float   @default(0)
+  priceBtc       Float   @default(0)
+  priceEth       Float   @default(0)
 }

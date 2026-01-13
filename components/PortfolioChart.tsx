@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -10,20 +11,44 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ChevronDown, TrendingUp } from "lucide-react";
 
-interface ChartDataPoint {
+// Indices disponibles (matches data from snapshot-service)
+interface Benchmark {
+  key: string;
+  dataKey: string;
+  name: string;
+  color: string;
+}
+
+const BENCHMARKS: Benchmark[] = [
+  { key: "msciWorld", dataKey: "msciWorldValue", name: "MSCI World", color: "#f59e0b" },
+  { key: "sp500", dataKey: "sp500Value", name: "S&P 500", color: "#ef4444" },
+  { key: "nasdaq", dataKey: "nasdaqValue", name: "NASDAQ", color: "#8b5cf6" },
+  { key: "cac40", dataKey: "cac40Value", name: "CAC 40", color: "#3b82f6" },
+  { key: "btc", dataKey: "btcValue", name: "Bitcoin", color: "#fbbf24" },
+  { key: "eth", dataKey: "ethValue", name: "Ethereum", color: "#6366f1" },
+];
+
+interface HistoryDataPoint {
   date: string;
+  time?: string;
   portfolioValue: number;
   invested: number;
-  msciValue: number;
+  msciWorldValue?: number;
+  sp500Value?: number;
+  nasdaqValue?: number;
+  cac40Value?: number;
+  btcValue?: number;
+  ethValue?: number;
 }
 
 interface PortfolioChartProps {
-  data: ChartDataPoint[];
+  data: HistoryDataPoint[];
 }
 
 // Custom tooltip component
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload, label, displayMode }: any) {
   if (active && payload && payload.length) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 shadow-xl">
@@ -36,10 +61,13 @@ function CustomTooltip({ active, payload, label }: any) {
             />
             <span className="text-gray-300">{entry.name}:</span>
             <span className="text-white font-medium font-mono">
-              {new Intl.NumberFormat("fr-FR", {
-                style: "currency",
-                currency: "EUR",
-              }).format(entry.value)}
+              {displayMode === "performance" || entry.name?.includes("%")
+                ? `${entry.value?.toFixed(2)}%`
+                : new Intl.NumberFormat("fr-FR", {
+                    style: "currency",
+                    currency: "EUR",
+                  }).format(entry.value)
+              }
             </span>
           </div>
         ))}
@@ -50,151 +78,227 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export default function PortfolioChart({ data }: PortfolioChartProps) {
+  const [selectedBenchmark, setSelectedBenchmark] = useState<Benchmark>(BENCHMARKS[0]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [displayMode, setDisplayMode] = useState<"value" | "performance">("value");
+
+  // Calculate performance data (base 100%)
+  const performanceData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const first = data[0];
+    const firstPortfolio = first.portfolioValue || 1;
+    const firstBenchmark = (first as any)[selectedBenchmark.dataKey] || 1;
+    const firstInvested = first.invested || 1;
+
+    return data.map((point) => {
+      const benchmarkValue = (point as any)[selectedBenchmark.dataKey] || 0;
+      return {
+        date: point.date,
+        portfolioPerf: ((point.portfolioValue / firstPortfolio) - 1) * 100,
+        investedPerf: ((point.invested / firstInvested) - 1) * 100,
+        benchmarkPerf: firstBenchmark > 0 ? ((benchmarkValue / firstBenchmark) - 1) * 100 : 0,
+      };
+    });
+  }, [data, selectedBenchmark]);
+
   // If no data, show placeholder
   if (!data || data.length === 0) {
     return (
       <div className="h-80 flex flex-col items-center justify-center text-gray-500">
-        <svg
-          className="w-16 h-16 mb-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
-          />
-        </svg>
-        <p className="text-lg font-medium">No history data yet</p>
+        <TrendingUp className="w-16 h-16 mb-4" />
+        <p className="text-lg font-medium">Aucun historique</p>
         <p className="text-sm text-gray-600 mt-1">
-          Start adding transactions to see your portfolio performance over time
+          Les snapshots sont créés toutes les 15 minutes
         </p>
       </div>
     );
   }
 
-  // Sample data for demo if we have real data
-  const chartData = data.length > 0 ? data : generateSampleData();
+  // Prepare chart data based on display mode
+  const chartData = displayMode === "value" 
+    ? data.map(point => ({
+        date: point.date,
+        portfolioValue: point.portfolioValue,
+        invested: point.invested,
+        benchmarkValue: (point as any)[selectedBenchmark.dataKey] || 0,
+      }))
+    : performanceData;
 
   return (
-    <div className="h-80">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={chartData}
-          margin={{
-            top: 10,
-            right: 30,
-            left: 0,
-            bottom: 0,
-          }}
-        >
-          <defs>
-            <linearGradient id="colorPortfolio" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="colorInvested" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="colorMsci" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis
-            dataKey="date"
-            stroke="#6b7280"
-            fontSize={12}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            stroke="#6b7280"
-            fontSize={12}
-            tickLine={false}
-            axisLine={false}
-            tickFormatter={(value) =>
-              new Intl.NumberFormat("fr-FR", {
-                notation: "compact",
-                compactDisplay: "short",
-              }).format(value)
-            }
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend
-            wrapperStyle={{
-              paddingTop: "20px",
-            }}
-          />
-          <Area
-            type="monotone"
-            dataKey="portfolioValue"
-            name="Portfolio Value"
-            stroke="#10b981"
-            fillOpacity={1}
-            fill="url(#colorPortfolio)"
-            strokeWidth={2}
-          />
-          <Area
-            type="monotone"
-            dataKey="invested"
-            name="Total Invested"
-            stroke="#6366f1"
-            fillOpacity={1}
-            fill="url(#colorInvested)"
-            strokeWidth={2}
-          />
-          <Area
-            type="monotone"
-            dataKey="msciValue"
-            name="MSCI World Benchmark"
-            stroke="#f59e0b"
-            fillOpacity={1}
-            fill="url(#colorMsci)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div>
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        {/* Benchmark Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white hover:bg-gray-750 transition-colors"
+          >
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: selectedBenchmark.color }}
+            />
+            <span>Benchmark: {selectedBenchmark.name}</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute z-50 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+              {BENCHMARKS.map((benchmark) => (
+                <button
+                  key={benchmark.key}
+                  onClick={() => {
+                    setSelectedBenchmark(benchmark);
+                    setDropdownOpen(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-left hover:bg-gray-700 transition-colors flex items-center gap-2 ${
+                    selectedBenchmark.key === benchmark.key
+                      ? "bg-gray-700 text-white"
+                      : "text-gray-300"
+                  }`}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: benchmark.color }}
+                  />
+                  {benchmark.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Display Mode Toggle */}
+        <div className="flex bg-gray-800 rounded-lg p-1">
+          <button
+            onClick={() => setDisplayMode("value")}
+            className={`px-3 py-1.5 rounded text-sm transition-colors ${
+              displayMode === "value"
+                ? "bg-emerald-600 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Valeur (€)
+          </button>
+          <button
+            onClick={() => setDisplayMode("performance")}
+            className={`px-3 py-1.5 rounded text-sm transition-colors ${
+              displayMode === "performance"
+                ? "bg-emerald-600 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Performance (%)
+          </button>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={chartData}
+            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id="colorPortfolio" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorInvested" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorBenchmark" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={selectedBenchmark.color} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={selectedBenchmark.color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis
+              dataKey="date"
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              stroke="#6b7280"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) =>
+                displayMode === "value"
+                  ? new Intl.NumberFormat("fr-FR", {
+                      notation: "compact",
+                      compactDisplay: "short",
+                    }).format(value)
+                  : `${value.toFixed(0)}%`
+              }
+            />
+            <Tooltip content={<CustomTooltip displayMode={displayMode} />} />
+            <Legend wrapperStyle={{ paddingTop: "20px" }} />
+            
+            {displayMode === "value" ? (
+              <>
+                <Area
+                  type="monotone"
+                  dataKey="portfolioValue"
+                  name="Portfolio"
+                  stroke="#10b981"
+                  fillOpacity={1}
+                  fill="url(#colorPortfolio)"
+                  strokeWidth={2}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="invested"
+                  name="Investi"
+                  stroke="#6366f1"
+                  fillOpacity={1}
+                  fill="url(#colorInvested)"
+                  strokeWidth={2}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="benchmarkValue"
+                  name={selectedBenchmark.name}
+                  stroke={selectedBenchmark.color}
+                  fillOpacity={1}
+                  fill="url(#colorBenchmark)"
+                  strokeWidth={2}
+                  connectNulls
+                />
+              </>
+            ) : (
+              <>
+                <Area
+                  type="monotone"
+                  dataKey="portfolioPerf"
+                  name="Portfolio %"
+                  stroke="#10b981"
+                  fillOpacity={1}
+                  fill="url(#colorPortfolio)"
+                  strokeWidth={2}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="benchmarkPerf"
+                  name={`${selectedBenchmark.name} %`}
+                  stroke={selectedBenchmark.color}
+                  fillOpacity={1}
+                  fill="url(#colorBenchmark)"
+                  strokeWidth={2}
+                  connectNulls
+                />
+              </>
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
-}
-
-// Generate sample data for demonstration
-function generateSampleData(): ChartDataPoint[] {
-  const data: ChartDataPoint[] = [];
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - 6);
-
-  let portfolioValue = 10000;
-  let invested = 10000;
-  let msciValue = 10000;
-
-  for (let i = 0; i < 180; i++) {
-    const date = new Date(startDate);
-    date.setDate(date.getDate() + i);
-
-    // Simulate some variation
-    portfolioValue *= 1 + (Math.random() - 0.48) * 0.02;
-    msciValue *= 1 + (Math.random() - 0.49) * 0.015;
-
-    // Occasional deposits
-    if (i % 30 === 0 && i > 0) {
-      invested += 1000;
-      portfolioValue += 1000;
-      msciValue += 1000;
-    }
-
-    data.push({
-      date: date.toISOString().split("T")[0],
-      portfolioValue: Math.round(portfolioValue * 100) / 100,
-      invested: Math.round(invested * 100) / 100,
-      msciValue: Math.round(msciValue * 100) / 100,
-    });
-  }
-
-  return data;
 }

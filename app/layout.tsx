@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
-import { LayoutDashboard, ArrowLeftRight, TrendingUp } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, TrendingUp, History } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Portfolio Tracker",
@@ -40,6 +40,13 @@ export default function RootLayout({
               >
                 <ArrowLeftRight className="w-5 h-5" />
                 Transactions
+              </Link>
+              <Link
+                href="/history"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+              >
+                <History className="w-5 h-5" />
+                Historique
               </Link>
             </nav>
 

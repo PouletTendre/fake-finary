@@ -40,7 +40,7 @@ interface ChartDataPoint {
   date: string;
   portfolioValue: number;
   invested: number;
-  msciValue: number;
+  theoreticalUnits?: number;
 }
 
 interface DashboardClientProps {

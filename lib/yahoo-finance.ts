@@ -205,6 +205,54 @@ export async function getEurUsdRate(): Promise<number> {
   }
 }
 
+// Indices de marché disponibles pour le benchmark
+export const MARKET_INDICES = {
+  "MSCI_WORLD": { ticker: "URTH", name: "MSCI World", color: "#f59e0b" },
+  "SP500": { ticker: "^GSPC", name: "S&P 500", color: "#ef4444" },
+  "NASDAQ": { ticker: "^IXIC", name: "NASDAQ Composite", color: "#8b5cf6" },
+  "CAC40": { ticker: "^FCHI", name: "CAC 40", color: "#3b82f6" },
+  "DAX": { ticker: "^GDAXI", name: "DAX", color: "#ec4899" },
+  "FTSE100": { ticker: "^FTSE", name: "FTSE 100", color: "#14b8a6" },
+  "NIKKEI": { ticker: "^N225", name: "Nikkei 225", color: "#f97316" },
+  "BTC": { ticker: "BTC-USD", name: "Bitcoin", color: "#fbbf24" },
+  "ETH": { ticker: "ETH-USD", name: "Ethereum", color: "#6366f1" },
+} as const;
+
+export type BenchmarkKey = keyof typeof MARKET_INDICES;
+
+// Récupérer l'historique d'un indice
+export async function getIndexHistory(
+  indexKey: BenchmarkKey,
+  startDate: Date,
+  endDate: Date = new Date()
+): Promise<{ date: string; value: number }[]> {
+  try {
+    const index = MARKET_INDICES[indexKey];
+    if (!index) return [];
+
+    const result = await yahooFinance.chart(index.ticker, {
+      period1: startDate,
+      period2: endDate,
+      interval: "1d",
+    });
+
+    if (!result.quotes || result.quotes.length === 0) {
+      console.warn(`[YAHOO] No data for index ${indexKey}`);
+      return [];
+    }
+
+    return result.quotes
+      .filter((q) => q.close !== null && q.close !== undefined)
+      .map((q) => ({
+        date: new Date(q.date).toISOString().split("T")[0],
+        value: q.close as number,
+      }));
+  } catch (error) {
+    console.error(`[YAHOO] Error fetching index ${indexKey}:`, error);
+    return [];
+  }
+}
+
 // Rechercher des tickers
 export async function searchTickers(query: string): Promise<
   { symbol: string; name: string; type: string }[]
@@ -226,3 +274,4 @@ export async function searchTickers(query: string): Promise<
     return [];
   }
 }
+
