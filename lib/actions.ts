@@ -2,9 +2,10 @@
 
 import { prisma } from "./prisma";
 import { revalidatePath } from "next/cache";
+import { getQuotes, getEurUsdRate } from "./yahoo-finance";
 
-// Dummy prices for now (simulating API)
-const MOCK_PRICES: Record<string, number> = {
+// Fallback prices si l'API est indisponible
+const FALLBACK_PRICES: Record<string, number> = {
   BTC: 65000,
   ETH: 3400,
   SOL: 140,
@@ -17,14 +18,16 @@ const MOCK_PRICES: Record<string, number> = {
   VOO: 480,
   VTI: 285,
   IWDA: 85,
-  // MSCI World ETF price
   MSCIWLD: 85,
 };
 
-// Get current price for an asset (mock data)
-function getCurrentPrice(ticker: string): number {
-  return MOCK_PRICES[ticker.toUpperCase()] ?? Math.random() * 100 + 50;
-}
+// Cache pour les prix (éviter trop d'appels API)
+let pricesCache: { prices: Map<string, number>; eurUsdRate: number; timestamp: number } | null = null;
+const CACHE_TTL = 60 * 1000; // 1 minute
+
+// Force cache clear on module load
+pricesCache = null;
+console.log('[ACTIONS] Module loaded, cache cleared');
 
 // Asset type definitions
 export interface HoldingData {
@@ -71,6 +74,48 @@ export interface TransactionWithAsset {
   };
 }
 
+// Récupérer les prix en temps réel (avec cache)
+async function fetchLivePrices(
+  assets: { ticker: string; type: string }[]
+): Promise<{ prices: Map<string, number>; eurUsdRate: number }> {
+  // Vérifier le cache
+  if (pricesCache && Date.now() - pricesCache.timestamp < CACHE_TTL) {
+    return { prices: pricesCache.prices, eurUsdRate: pricesCache.eurUsdRate };
+  }
+
+  try {
+    console.log('[FETCH] Fetching live prices for:', assets.map(a => a.ticker));
+    
+    // Récupérer les prix et le taux EUR/USD en parallèle
+    const [quotesMap, eurUsdRate] = await Promise.all([
+      getQuotes(assets.map((a) => ({ ticker: a.ticker, assetType: a.type }))),
+      getEurUsdRate(),
+    ]);
+
+    console.log('[FETCH] Got EUR/USD rate:', eurUsdRate);
+    console.log('[FETCH] Got prices:', Object.fromEntries(quotesMap));
+
+    // Mettre en cache
+    pricesCache = {
+      prices: quotesMap,
+      eurUsdRate,
+      timestamp: Date.now(),
+    };
+
+    return { prices: quotesMap, eurUsdRate };
+  } catch (error) {
+    console.error("Erreur récupération prix:", error);
+    // Retourner les prix fallback
+    const fallbackMap = new Map<string, number>();
+    assets.forEach((a) => {
+      if (FALLBACK_PRICES[a.ticker]) {
+        fallbackMap.set(a.ticker, FALLBACK_PRICES[a.ticker]);
+      }
+    });
+    return { prices: fallbackMap, eurUsdRate: 1.09 };
+  }
+}
+
 // Get all portfolio data with calculated PRU and performance
 export async function getPortfolioData(): Promise<PortfolioData> {
   const assets = await prisma.asset.findMany({
@@ -80,6 +125,11 @@ export async function getPortfolioData(): Promise<PortfolioData> {
       },
     },
   });
+
+  // Récupérer les prix en temps réel
+  const { prices: livePrices, eurUsdRate } = await fetchLivePrices(
+    assets.map((a) => ({ ticker: a.ticker, type: a.type }))
+  );
 
   const holdings: HoldingData[] = [];
 
@@ -103,7 +153,13 @@ export async function getPortfolioData(): Promise<PortfolioData> {
 
     // PRU = Weighted average of BUY transactions
     const pru = totalBuyQuantity > 0 ? totalBuyCostEur / totalBuyQuantity : 0;
-    const currentPrice = getCurrentPrice(asset.ticker);
+    
+    // Prix en temps réel (USD) converti en EUR
+    const priceUsd = livePrices.get(asset.ticker.toUpperCase()) ?? 
+                     FALLBACK_PRICES[asset.ticker.toUpperCase()] ?? 
+                     0;
+    const currentPrice = priceUsd / eurUsdRate; // Convertir en EUR
+    
     const currentValue = totalQuantity * currentPrice;
     const totalInvestedEur = totalQuantity * pru;
     const pnlEur = currentValue - totalInvestedEur;
@@ -287,7 +343,7 @@ export async function getPortfolioHistory() {
     date: snapshot.date.toISOString().split("T")[0],
     portfolioValue: snapshot.totalValueEur,
     invested: snapshot.totalInvestedEur,
-    msciValue: snapshot.theoreticalMsciUnits * MOCK_PRICES.MSCIWLD,
+    msciValue: snapshot.theoreticalMsciUnits * FALLBACK_PRICES.MSCIWLD,
     msciUnits: snapshot.theoreticalMsciUnits,
   }));
 }
