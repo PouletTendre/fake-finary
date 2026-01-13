@@ -40,9 +40,42 @@ const CRYPTO_TICKERS: Record<string, string> = {
   VET: "VET-USD",
 };
 
+// Tokens exotiques mappés vers un proxy (valeur approximativement égale)
+// Ces tokens n'ont pas de données sur Yahoo Finance
+const PROXY_TICKERS: Record<string, string> = {
+  // Staked ETH variants (≈ 1 ETH)
+  "BETH": "ETH-USD",
+  "BETH-USD": "ETH-USD",
+  "STETH": "ETH-USD",
+  "WSTETH": "ETH-USD",
+  "CBETH": "ETH-USD",
+  "RETH": "ETH-USD",
+  // Wrapped BTC variants (≈ 1 BTC)
+  "WBTC": "BTC-USD",
+  "TBTC": "BTC-USD",
+  "HBTC": "BTC-USD",
+  // Stablecoins (≈ 1 USD)
+  "USDT": "USDC-USD",
+  "USDC": "USDC-USD",
+  "DAI": "DAI-USD",
+  "BUSD": "USDC-USD",
+  "TUSD": "USDC-USD",
+};
+
 // Convertir ticker en format Yahoo Finance
 function toYahooTicker(ticker: string, assetType?: string): string {
   const upperTicker = ticker.toUpperCase();
+  
+  // Si le ticker contient déjà -USD, le retourner tel quel
+  if (upperTicker.endsWith("-USD")) {
+    return upperTicker;
+  }
+  
+  // Vérifier d'abord les proxies pour les tokens exotiques
+  if (PROXY_TICKERS[upperTicker]) {
+    console.log(`[YAHOO] Using proxy for ${upperTicker} -> ${PROXY_TICKERS[upperTicker]}`);
+    return PROXY_TICKERS[upperTicker];
+  }
   
   // Si c'est une crypto connue
   if (CRYPTO_TICKERS[upperTicker]) {

@@ -90,17 +90,16 @@ export default function TickerSearch({ assets }: TickerSearchProps) {
         return;
       }
 
-      // Don't search if we have local results
-      if (filteredAssets.length > 0) {
-        setYahooResults([]);
-        return;
-      }
-
       setIsSearching(true);
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(debouncedSearch)}`);
         const data = await response.json();
-        setYahooResults(data.results || []);
+        // Filtrer les résultats Yahoo pour exclure ceux déjà en local
+        const localTickers = new Set(assets.map(a => a.ticker.toUpperCase()));
+        const filtered = (data.results || []).filter(
+          (r: YahooResult) => !localTickers.has(r.symbol.toUpperCase())
+        );
+        setYahooResults(filtered);
       } catch (error) {
         console.error("Erreur recherche Yahoo:", error);
         setYahooResults([]);
@@ -110,7 +109,7 @@ export default function TickerSearch({ assets }: TickerSearchProps) {
     }
 
     searchYahoo();
-  }, [debouncedSearch, filteredAssets.length]);
+  }, [debouncedSearch, assets]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

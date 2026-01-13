@@ -209,9 +209,14 @@ export async function getTransactions(): Promise<TransactionWithAsset[]> {
   return transactions;
 }
 
-// Get all assets for dropdown
+// Get all assets for dropdown (only those with transactions)
 export async function getAssets() {
   return prisma.asset.findMany({
+    where: {
+      transactions: {
+        some: {}, // Seulement les assets avec au moins une transaction
+      },
+    },
     orderBy: { ticker: "asc" },
   });
 }
@@ -288,8 +293,72 @@ export async function addTransaction(formData: FormData) {
 
 // Delete a transaction
 export async function deleteTransaction(id: string) {
+  // Récupérer la transaction pour avoir l'assetId
+  const transaction = await prisma.transaction.findUnique({
+    where: { id },
+    select: { assetId: true },
+  });
+
   await prisma.transaction.delete({
     where: { id },
+  });
+
+  // Vérifier si l'asset a encore des transactions
+  if (transaction?.assetId) {
+    const remainingTransactions = await prisma.transaction.count({
+      where: { assetId: transaction.assetId },
+    });
+
+    // Supprimer l'asset s'il n'a plus de transactions
+    if (remainingTransactions === 0) {
+      await prisma.asset.delete({
+        where: { id: transaction.assetId },
+      });
+    }
+  }
+
+  revalidatePath("/");
+  revalidatePath("/transactions");
+}
+
+// Update a transaction
+export async function updateTransaction(id: string, formData: FormData) {
+  const type = formData.get("type") as string;
+  const quantity = parseFloat(formData.get("quantity") as string);
+  const unitPrice = parseFloat(formData.get("unitPrice") as string);
+  const currency = formData.get("currency") as string;
+  const dateString = formData.get("date") as string;
+  const fees = parseFloat((formData.get("fees") as string) || "0");
+  const exchangeRateInput = formData.get("exchangeRate") as string;
+  
+  const exchangeRate = exchangeRateInput 
+    ? parseFloat(exchangeRateInput)
+    : currency === "USD" 
+      ? 0.92 
+      : 1.0;
+
+  const date = new Date(dateString);
+
+  // Calculate total in EUR
+  let totalEur: number;
+  if (currency === "EUR") {
+    totalEur = quantity * unitPrice + fees;
+  } else {
+    totalEur = (quantity * unitPrice + fees) * exchangeRate;
+  }
+
+  await prisma.transaction.update({
+    where: { id },
+    data: {
+      date,
+      type,
+      quantity,
+      unitPrice,
+      currency,
+      exchangeRate,
+      fees,
+      totalEur,
+    },
   });
 
   revalidatePath("/");
@@ -298,7 +367,7 @@ export async function deleteTransaction(id: string) {
 
 // Update MSCI benchmark tracking (theoretical MSCI units)
 async function updateMsciBenchmark(date: Date, investedEur: number) {
-  const msciPrice = MOCK_PRICES.MSCIWLD;
+  const msciPrice = FALLBACK_PRICES.MSCIWLD;
   const unitsToAdd = investedEur / msciPrice;
 
   // Get the latest snapshot to add cumulative units
