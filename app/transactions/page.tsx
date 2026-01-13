@@ -1,12 +1,13 @@
-import { addTransaction, getTransactions, getAssets } from "@/lib/actions";
+import { addTransaction, getTransactions, getAssets, getCurrentExchangeRate } from "@/lib/actions";
 import { Plus } from "lucide-react";
 import TickerSearch from "@/components/TickerSearch";
 import TransactionList from "@/components/TransactionList";
 
 export default async function TransactionsPage() {
-  const [transactions, assets] = await Promise.all([
+  const [transactions, assets, currentRate] = await Promise.all([
     getTransactions(),
     getAssets(),
+    getCurrentExchangeRate(),
   ]);
 
   return (
@@ -119,7 +120,7 @@ export default async function TransactionsPage() {
             {/* Exchange Rate */}
             <div>
               <label htmlFor="exchangeRate" className="block text-sm font-medium text-gray-300 mb-2">
-                Exchange Rate (EUR/USD)
+                Taux €/$ <span className="text-gray-500 text-xs">(1$ = X€)</span>
               </label>
               <input
                 type="number"
@@ -127,7 +128,7 @@ export default async function TransactionsPage() {
                 name="exchangeRate"
                 step="any"
                 min="0"
-                placeholder="Auto (0.92)"
+                placeholder={`Auto (${currentRate.toFixed(4)})`}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent font-mono"
               />
             </div>

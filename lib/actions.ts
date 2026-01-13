@@ -221,6 +221,12 @@ export async function getAssets() {
   });
 }
 
+// Get current EUR/USD exchange rate for display
+export async function getCurrentExchangeRate(): Promise<number> {
+  const eurUsdRate = await getEurUsdRate(); // ex: 1.17 (1€ = 1.17$)
+  return 1 / eurUsdRate; // ex: 0.855 (1$ = 0.855€)
+}
+
 // Add a new transaction
 export async function addTransaction(formData: FormData) {
   const ticker = formData.get("ticker") as string;
@@ -234,12 +240,19 @@ export async function addTransaction(formData: FormData) {
   const fees = parseFloat((formData.get("fees") as string) || "0");
   const exchangeRateInput = formData.get("exchangeRate") as string;
   
-  // Default exchange rate: 1 for EUR, ~0.92 for USD (1 EUR = 1.09 USD)
-  const exchangeRate = exchangeRateInput 
-    ? parseFloat(exchangeRateInput)
-    : currency === "USD" 
-      ? 0.92 
-      : 1.0;
+  // Récupérer le taux EUR/USD actuel si pas fourni
+  let exchangeRate: number;
+  if (exchangeRateInput && parseFloat(exchangeRateInput) > 0) {
+    exchangeRate = parseFloat(exchangeRateInput);
+  } else if (currency === "USD") {
+    // Récupérer le taux en temps réel: EURUSD=X donne combien vaut 1€ en $
+    // Donc pour convertir USD -> EUR, on divise par ce taux (ou multiplie par 1/taux)
+    const eurUsdRate = await getEurUsdRate(); // ex: 1.17 (1€ = 1.17$)
+    exchangeRate = 1 / eurUsdRate; // ex: 0.855 (1$ = 0.855€)
+    console.log(`[TRANSACTION] Using live EUR/USD rate: ${eurUsdRate} -> exchangeRate: ${exchangeRate.toFixed(4)}`);
+  } else {
+    exchangeRate = 1.0;
+  }
 
   const date = new Date(dateString);
 
@@ -331,11 +344,16 @@ export async function updateTransaction(id: string, formData: FormData) {
   const fees = parseFloat((formData.get("fees") as string) || "0");
   const exchangeRateInput = formData.get("exchangeRate") as string;
   
-  const exchangeRate = exchangeRateInput 
-    ? parseFloat(exchangeRateInput)
-    : currency === "USD" 
-      ? 0.92 
-      : 1.0;
+  // Récupérer le taux EUR/USD actuel si pas fourni
+  let exchangeRate: number;
+  if (exchangeRateInput && parseFloat(exchangeRateInput) > 0) {
+    exchangeRate = parseFloat(exchangeRateInput);
+  } else if (currency === "USD") {
+    const eurUsdRate = await getEurUsdRate();
+    exchangeRate = 1 / eurUsdRate;
+  } else {
+    exchangeRate = 1.0;
+  }
 
   const date = new Date(dateString);
 
